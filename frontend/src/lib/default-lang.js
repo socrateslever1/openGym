@@ -17,6 +17,9 @@
 import { LANGS } from './i18n-core.js'
 
 const KEYS = Object.keys(LANGS)
+// The standalone Android/iOS build maintained by this fork starts in Brazilian Portuguese.
+// Explicit language selections (langAuto === false) continue to take precedence.
+const PT_BR_MOBILE = import.meta.env?.VITE_MOBILE === '1'
 
 /** A language tag ('pt-BR', 'pt_br', 'de-AT', 'en-US') as one of LANGS' keys, or null. */
 export function matchLocale(tag) {
@@ -35,6 +38,7 @@ export function matchLocale(tag) {
 /** The language a copy that never chose one should be in, or null for a copy that chose. */
 export function autoLang(S, config, navLangs = []) {
   if (!S || S.langAuto !== true) return null
+  if (PT_BR_MOBILE) return 'pt-BR'
   return matchLocale(config?.default_lang)
     || (navLangs || []).map(matchLocale).find(Boolean)
     || 'en'
@@ -58,6 +62,7 @@ function cachedDefaultLang() {
  */
 export function effectiveLang(S, config, navLangs = browserLangs()) {
   const own = (S && typeof S.lang === 'string' && S.lang) || 'en'
+  if (PT_BR_MOBILE && (!S || S.langAuto === true || (own === 'en' && S.langAuto == null))) return 'pt-BR'
   if (!S || S.langAuto !== true) return own
   let cfg = config
   if (!cfg) {
