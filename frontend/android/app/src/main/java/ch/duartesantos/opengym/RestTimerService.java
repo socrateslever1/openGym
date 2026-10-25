@@ -21,11 +21,11 @@ public class RestTimerService extends Service {
     private long pausedLeft;
     private boolean paused;
     private boolean running;
-    private String pauseLabel = "Pause";
-    private String resumeLabel = "Resume";
+    private String pauseLabel = "Pausar";
+    private String resumeLabel = "Retomar";
     private String minusLabel = "\u2212 15s";
     private String plusLabel = "+ 15s";
-    private String skipLabel = "Skip";
+    private String skipLabel = "Pular";
     private int accent = 0xFF30D158;
     private int ink = 0xFF000000;
     private PowerManager.WakeLock cpu;
