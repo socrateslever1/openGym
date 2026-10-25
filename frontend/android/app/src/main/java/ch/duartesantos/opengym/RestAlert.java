@@ -43,17 +43,17 @@ public final class RestAlert {
      * good and an end that must not buzz goes out on this channel, which never vibrates.
      */
     static final String QUIET_CHANNEL_ID = "rest-over-quiet";
-    private static String lastAlertTitle = "Rest over";
+    private static String lastAlertTitle = "Descanso encerrado";
     private static boolean lastSound = true;
     private static String lastTone = "chime";
     private static boolean lastVibrate = true;
     private static boolean lastAlarmBuzz = false;
     private static String lastChannel = CHANNEL_ID;
-    private static String labPause = "Pause";
-    private static String labResume = "Resume";
+    private static String labPause = "Pausar";
+    private static String labResume = "Retomar";
     private static String labMinus = "\u2212 15s";
     private static String labPlus = "+ 15s";
-    private static String labSkip = "Skip";
+    private static String labSkip = "Pular";
     private static int lastAccent = 0xFF30D158;
     private static int lastInk = 0xFF000000;
     static final int COUNTDOWN_ID = 41;
@@ -106,7 +106,7 @@ public final class RestAlert {
             String posted = alarmBuzz ? QUIET_CHANNEL_ID : channelId;
             ensureChannel(ctx, nm, posted, importanceOf(importance), visibilityOf(visibility), !alarmBuzz && vibrate);
         }
-        lastAlertTitle = title == null ? "Rest over" : title;
+        lastAlertTitle = title == null ? ctx.getString(R.string.rest_over_title) : title;
         lastSound = sound;
         lastTone = tone == null ? "chime" : tone;
         lastVibrate = vibrate;
@@ -234,7 +234,7 @@ public final class RestAlert {
     @SuppressWarnings("deprecation")
     private static boolean showNotification(Context ctx, Intent intent, boolean alarmBuzz) {
         String title = intent.getStringExtra("title");
-        if (title == null || title.isEmpty()) title = "Rest’s over. Next set!";
+        if (title == null || title.isEmpty()) title = ctx.getString(R.string.rest_over_next_set);
         // With the alarm buzz on, the notification itself stays still: the buzz comes from buzz().
         boolean vibrate = intent.getBooleanExtra("vibrate", true) && !alarmBuzz;
         String channelId = channelFor(intent.getStringExtra("channelId"), vibrate);
@@ -393,7 +393,7 @@ public final class RestAlert {
         Intent i = new Intent(ctx, RestTimerService.class);
         i.putExtra("endsAt", endsAt);
         i.putExtra("totalMs", totalMs);
-        i.putExtra("title", title == null || title.isEmpty() ? "Rest" : title);
+        i.putExtra("title", title == null || title.isEmpty() ? ctx.getString(R.string.rest_default_title) : title);
         i.putExtra("pause", labPause);
         i.putExtra("resume", labResume);
         i.putExtra("minus", labMinus);
