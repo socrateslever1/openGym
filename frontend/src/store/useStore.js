@@ -262,7 +262,7 @@ const detectedLang = () => {
 // merged under a saved copy it would claim that every existing profile never chose.
 export function freshState() {
   const s = clone(DEF)
-  s.lang = detectedLang()
+  s.lang = MOBILE ? 'pt-BR' : detectedLang()
   s.langAuto = true
   s.weighIn = false
   // Exercise animations: Small (v1.3.11), a thumbnail beside the exercise name that a tap opens,
