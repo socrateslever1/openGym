@@ -1,0 +1,62 @@
+name: Android S25+ diagnostic APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/android-s25.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Configure Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Configure Android SDK 36
+        uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build mobile assets and synchronize Capacitor
+        working-directory: frontend
+        run: npm run build:mobile
+      - name: Build sideload debug APK
+        working-directory: frontend/android
+        run: bash ./gradlew --no-daemon assembleSideloadDebug
+      - name: Verify APK package and signature
+        run: |
+          APK=frontend/android/app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
+          test -s "$APK"
+          $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK"
+          $ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK" | head -25
+          sha256sum "$APK" > openGym-S25-test.apk.sha256
+          cp "$APK" openGym-S25-test.apk
+      - name: Upload installable diagnostic APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: openGym-S25-test-APK
+          path: |
+            openGym-S25-test.apk
+            openGym-S25-test.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
