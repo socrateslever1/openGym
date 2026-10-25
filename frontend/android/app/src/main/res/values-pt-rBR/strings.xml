@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">openGym</string>
+    <string name="title_activity_main">openGym</string>
+    <string name="rest_countdown_channel_name">Contagem regressiva do descanso</string>
+    <string name="rest_channel_name">Temporizador de descanso</string>
+    <string name="rest_quiet_channel_name">Temporizador de descanso sem vibração</string>
+    <string name="rest_channel_desc">Descanso entre séries na área de notificações. A tela bloqueada só exibe essas informações quando as notificações estão permitidas.</string>
+    <string name="rest_over_title">Descanso encerrado</string>
+    <string name="rest_over_next_set">Descanso encerrado. Próxima série!</string>
+    <string name="rest_default_title">Descanso</string>
+    <string name="rest_pause_label">Pausar</string>
+    <string name="rest_resume_label">Retomar</string>
+    <string name="rest_skip_label">Pular</string>
+</resources>
