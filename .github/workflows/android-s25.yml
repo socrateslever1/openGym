@@ -30,10 +30,19 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Configure Android SDK 36
-        uses: android-actions/setup-android@v3
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0"
+          test -f "${ANDROID_HOME}/platforms/android-36/android.jar"
+          test -x "${ANDROID_HOME}/build-tools/36.0.0/apksigner"
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -42,7 +51,7 @@ jobs:
         run: npm run build:mobile
       - name: Build sideload debug APK
         working-directory: frontend/android
-        run: bash ./gradlew --no-daemon assembleSideloadDebug
+        run: chmod +x ./gradlew && ./gradlew --no-daemon assembleSideloadDebug
       - name: Verify APK package and signature
         run: |
           APK=frontend/android/app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
