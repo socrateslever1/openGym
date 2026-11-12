@@ -12,8 +12,9 @@
 import { MOBILE } from './mobile.js'
 import { BUILTIN_PX } from './anim-quality.js'
 
-const REPO = 'DuarteSantos8/openGym'
+const REPO = 'socrateslever1/openGym'
 const LATEST_URL = `https://api.github.com/repos/${REPO}/releases/latest`
+const BETA_TAG_URL = `https://api.github.com/repos/${REPO}/releases/tags/android-signed-beta`
 export const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`
 
 /**
@@ -51,21 +52,52 @@ function compareSemver(a, b) {
 // about it every time. The promise is cached, a failure is not.
 let cached = null
 export function resetUpdateCheck() { cached = null }
-export async function checkForUpdate() {
+export async function checkForUpdate(force = false) {
+  if (force) cached = null
   if (!cached) cached = fetchLatest().catch(e => { cached = null; throw e })
   return cached
 }
+async function installedBuildCode() {
+  if (!MOBILE) return 0
+  try {
+    const { App } = await import('@capacitor/app')
+    const info = await App.getInfo()
+    const code = Number(info?.build)
+    return Number.isSafeInteger(code) && code > 0 ? code : 0
+  } catch {
+    return 0
+  }
+}
+function parseVersionCode(body) {
+  const m = /versionCode:\s*(\d+)/i.exec(typeof body === 'string' ? body : '')
+  const code = Number(m?.[1] || 0)
+  return Number.isSafeInteger(code) && code > 0 ? code : 0
+}
 async function fetchLatest() {
-  const res = await fetch(LATEST_URL, { headers: { Accept: 'application/vnd.github+json' } })
-  // 404: the repository has no published release yet
-  if (res.status === 404) return { hasUpdate: false, latestVersion: __APP_VERSION__, apkUrl: null, hashUrl: null }
+  const res = await fetch(LATEST_URL, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' })
+  if (res.status === 404) {
+    // Fallback to rolling signed beta release (CapitalFlow pattern: tag android-signed-beta + versionCode)
+    const betaRes = await fetch(BETA_TAG_URL, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' })
+    if (betaRes.status === 404) return { hasUpdate: false, latestVersion: __APP_VERSION__, apkUrl: null, hashUrl: null }
+    if (!betaRes.ok) throw new Error(`GitHub API ${betaRes.status}`)
+    const beta = await betaRes.json()
+    const remoteCode = parseVersionCode(beta.body)
+    const localCode = await installedBuildCode()
+    const latestVersion = String(beta.name || beta.tag_name || __APP_VERSION__).replace(/^v/, '')
+    const hasUpdate = remoteCode > 0 && localCode > 0 ? remoteCode > localCode : false
+    const { apk, hash } = pickApk(beta.assets || [])
+    return { hasUpdate, latestVersion, versionCode: remoteCode || null, apkUrl: apk?.browser_download_url || null, hashUrl: hash?.browser_download_url || null }
+  }
   if (!res.ok) throw new Error(`GitHub API ${res.status}`)
   const latest = await res.json()
   const latestVersion = String(latest.tag_name || '').replace(/^v/, '')
   if (!latestVersion) return { hasUpdate: false, latestVersion: __APP_VERSION__, apkUrl: null, hashUrl: null }
+  const remoteCode = parseVersionCode(latest.body)
+  const localCode = await installedBuildCode()
   const hasUpdate = compareSemver(latestVersion, __APP_VERSION__) > 0
+    || (remoteCode > 0 && localCode > 0 && remoteCode > localCode)
   const { apk, hash } = pickApk(latest.assets || [])
-  return { hasUpdate, latestVersion, apkUrl: apk?.browser_download_url || null, hashUrl: hash?.browser_download_url || null }
+  return { hasUpdate, latestVersion, versionCode: remoteCode || null, apkUrl: apk?.browser_download_url || null, hashUrl: hash?.browser_download_url || null }
 }
 
 /**
@@ -88,7 +120,7 @@ export const APK_VARIANT = APK_VARIANTS.includes(ENV.VITE_APK_VARIANT)
   : (BUILTIN_PX >= 360 ? 'hd' : BUILTIN_PX > 180 ? 'plus' : 'standard')
 const tagged = (name, tag) => new RegExp(`(^|[-_.])${tag}([-_.]|$)`, 'i').test(name)
 /** Which kind an APK file name is: 'hd', 'plus' or 'standard'. */
-export const apkKind = name => tagged(name, 'hd') ? 'hd' : tagged(name, 'plus') ? 'plus' : 'standard'
+export const apkKind = name => (tagged(name, 'hd') || tagged(name, 'fullhd')) ? 'hd' : tagged(name, 'plus') ? 'plus' : 'standard'
 export function pickApk(assets, variant = APK_VARIANT) {
   const apk = assets.find(a => /\.apk$/i.test(a.name) && apkKind(a.name) === variant) || null
   const hash = apk ? assets.find(a => a.name === `${apk.name}.sha256`) || null : null

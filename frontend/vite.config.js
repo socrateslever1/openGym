@@ -6,6 +6,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { lazyAssets, stampSw } from './scripts/sw-stamp.mjs'
 
+// Mobile APK builds always target the Full HD (1080p) variant and assets unless explicitly overridden.
+if (process.env.VITE_MOBILE === '1') {
+  process.env.VITE_BUILTIN_CLIP_PX ??= '1080'
+  process.env.VITE_APK_VARIANT ??= 'hd'
+}
+
 const backend = process.env.API_TARGET || 'http://127.0.0.1:3000'
 // The API refuses a state-changing request that a browser sent from anywhere other than its own
 // ORIGIN (the CSRF guard in api/server.js). The dev server is on a different port, so the page's

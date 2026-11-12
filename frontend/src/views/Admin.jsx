@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { api } from '../lib/api.js'
+import { t } from '../lib/i18n.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur } from '../lib/format.js'
 import { auditCat, auditLine, fmtWhen } from '../lib/audit.js'
 import { workoutVolume, setsDone } from '../lib/history.js'
@@ -10,6 +11,7 @@ import { confirmSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import AdminCoach from './AdminCoach.jsx'
+import AdminWorkouts from './AdminWorkouts.jsx'
 import '../admin.css'
 
 // Admin-only operator dashboard (owner passkey + admin flag; guarded again server-side).
@@ -21,12 +23,12 @@ import '../admin.css'
 // code means.
 
 const rel = ts => {
-  if (!ts) return 'never'
+  if (!ts) return t('never')
   const s = Math.max(0, (Date.now() - ts) / 1000)
-  if (s < 60) return 'just now'
-  if (s < 3600) return Math.floor(s / 60) + ' min ago'
-  if (s < 86400) return Math.floor(s / 3600) + ' h ago'
-  return Math.floor(s / 86400) + ' d ago'
+  if (s < 60) return t('just now')
+  if (s < 3600) return Math.floor(s / 60) + ' ' + t('min ago')
+  if (s < 86400) return Math.floor(s / 3600) + ' ' + t('h ago')
+  return Math.floor(s / 86400) + ' ' + t('d ago')
 }
 const dur = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min' }
 
@@ -113,11 +115,11 @@ function UserDetail({ id, viewerOwner, onChanged, close }) {
       <span className="adm-pill">joined {u.created ? fmtDate(u.created.slice(0, 10)) : '–'}</span>
     </div>
     <div className="tiles" style={{ textAlign: 'start' }}>
-      <div className="tile"><div className="l">Workouts</div><div className="v" style={{ fontSize: '1.1rem' }}>{workouts.length}</div></div>
-      <div className="tile"><div className="l">Weigh-ins</div><div className="v" style={{ fontSize: '1.1rem' }}>{d.bodyweight.length}</div></div>
-      <div className="tile"><div className="l">Measurements</div><div className="v" style={{ fontSize: '1.1rem' }}>{(d.measurements || []).length}</div></div>
-      <div className="tile"><div className="l">Routines</div><div className="v" style={{ fontSize: '1.1rem' }}>{d.routines.length}</div></div>
-      <div className="tile"><div className="l">Last sync</div><div className="v" style={{ fontSize: '.95rem' }}>{rel(d.lastSync)}</div></div>
+      <div className="tile"><div className="l">{t('Workouts')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{workouts.length}</div></div>
+      <div className="tile"><div className="l">{t('Weigh-ins')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{d.bodyweight.length}</div></div>
+      <div className="tile"><div className="l">{t('Measurements')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{(d.measurements || []).length}</div></div>
+      <div className="tile"><div className="l">{t('Routines')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{d.routines.length}</div></div>
+      <div className="tile"><div className="l">{t('Last sync')}</div><div className="v" style={{ fontSize: '.95rem' }}>{rel(d.lastSync)}</div></div>
     </div>
     {viewerOwner && !u.owner && !u.disabled && <>
       <button className="btn" style={{ margin: '12px 0 4px' }}
@@ -134,8 +136,8 @@ function UserDetail({ id, viewerOwner, onChanged, close }) {
     {!u.admin && <>
       <button className={'btn ' + (u.disabled ? 'primary' : 'danger')} style={{ margin: '12px 0 4px' }}
         onClick={() => u.disabled ? setDisabled(false)
-          : confirmSheet({ title: 'Disable ' + u.name + '?', message: 'They are signed out everywhere and can no longer sync or log in until re-enabled. Their data stays.', confirmText: 'Disable', danger: true, onConfirm: () => setDisabled(true) })}>
-        {u.disabled ? 'Enable account' : 'Disable account'}</button>
+          : confirmSheet({ title: t('Disable {0}?', u.name), message: t('They are signed out everywhere and can no longer sync or log in until re-enabled. Their data stays.'), confirmText: t('Disable'), danger: true, onConfirm: () => setDisabled(true) })}>
+        {u.disabled ? t('Enable account') : t('Disable account')}</button>
       <div className="adm-hint">{u.disabled ? 'Enabling lets them sign in and sync again.' : 'Disabling signs them out everywhere and blocks sign-in. Nothing is deleted.'}</div>
       {/* The one destructive action in the app (issue #107), so it asks twice and offers the
           export first — that history is theirs. The second step names the account again, because
@@ -163,14 +165,22 @@ function UserDetail({ id, viewerOwner, onChanged, close }) {
           : 'No password yet. A one-time code lets them set one. That’s the way back in after losing their only passkey.'}</div>
       </>}
     </>}
-    <h4 className="sec">Workout history</h4>
+    <h4 className="sec">{t('Routines')}</h4>
+    {d.routines.length ? <div style={{ marginBottom: 10 }}>
+      {d.routines.map(r => <div key={r.id} className="row between" style={{ padding: '7px 2px', borderBottom: 'var(--hair) solid var(--sep)' }}>
+        <div className="small" style={{ fontWeight: 600 }}>{r.emoji || '🏋️'} {r.name}
+          {r.assignedByAdmin && <span className="adm-pill acc" style={{ marginInlineStart: 6 }}>{t('Assigned')}</span>}</div>
+        <span className="dim" style={{ fontSize: '.72rem' }}>{t('{0} exercises', r.count ?? (r.ex?.length || 0))}</span>
+      </div>)}
+    </div> : <div className="adm-empty" style={{ marginBottom: 10 }}>{t('No routines yet.')}</div>}
+    <h4 className="sec">{t('Workout history')}</h4>
     {workouts.length ? <div className="list" style={{ gap: 0 }}>
       {workouts.slice(0, 60).map(w => <div key={w.id} className="row between" style={{ padding: '9px 2px', borderBottom: '1px solid var(--sep)' }}>
         <div><div className="small" style={{ fontWeight: 600 }}>{w.name}</div>
-          <div className="dim" style={{ fontSize: '.72rem' }}>{fmtDate(w.d, true)} · {fmtDur((w.end || w.start) - w.start)} · {setsDone(w)} sets{w.prs?.length ? ' · ' + w.prs.length + ' PR' : ''}</div></div>
+          <div className="dim" style={{ fontSize: '.72rem' }}>{fmtDate(w.d, true)} · {fmtDur((w.end || w.start) - w.start)} · {setsDone(w)} {t('sets')}{w.prs?.length ? ' · ' + w.prs.length + ' PR' : ''}</div></div>
         <span className="small muted">{fmtVol(w.vol ?? workoutVolume(w), d.unit)}</span>
       </div>)}
-    </div> : <div className="adm-empty">No workouts logged.</div>}
+    </div> : <div className="adm-empty">{t('No workouts logged.')}</div>}
   </>
 }
 
@@ -285,6 +295,8 @@ export default function Admin() {
   const [invites, setInvites] = useState(null)
   const [inviteOnly, setInviteOnly] = useState(false)
   const [tick, setTick] = useState(0)          // the ↻ button; the activity log listens to it
+  const [userSearch, setUserSearch] = useState('')
+  const [userFilter, setUserFilter] = useState('all')
 
   // A failed load, or an answer without a list, used to leave the page on "Loading…" for good —
   // with a toast every 15 seconds from the poll, or with nothing at all when the answer was
@@ -307,42 +319,52 @@ export default function Admin() {
   const liveUsers = (users || []).filter(u => u.live)
   const activeCount = (users || []).filter(u => u.lastSync && Date.now() - u.lastSync < 7 * 86400000).length
   const disabledCount = (users || []).filter(u => u.disabled).length
+  const filteredUsers = (users || []).filter(u => {
+    if (userFilter === 'active' && u.disabled) return false
+    if (userFilter === 'disabled' && !u.disabled) return false
+    if (userFilter === 'admin' && !u.admin) return false
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return true
+    return u.name.toLowerCase().includes(q) || (u.email && u.email.toLowerCase().includes(q))
+  })
 
   return <div className="narrow">
     <div className="hdr">
-      <button className="iconbtn" data-back="/settings/account" onClick={() => nav('/settings/account')} aria-label="Back"><Icon name="chevronLeft" /></button>
-      <div style={{ flex: 1, marginInlineStart: 8 }}><h1 style={{ margin: 0 }}>Admin</h1>
-        <div className="sub">{users ? users.length + ' users · ' + activeCount + ' active this week' : usersErr ? 'Could not load' : 'Loading…'}</div></div>
+      <button className="iconbtn" data-back="/settings/account" onClick={() => nav('/settings/account')} aria-label={t('Back')}><Icon name="chevronLeft" /></button>
+      <div style={{ flex: 1, marginInlineStart: 8 }}><h1 style={{ margin: 0 }}>{t('Admin')}</h1>
+        <div className="sub">{users ? t('{0} users · {1} active this week', users.length, activeCount) : usersErr ? t('Could not load') : t('Loading…')}</div></div>
       <button className="iconbtn" onClick={() => { loadUsers(); loadInvites(); setTick(n => n + 1) }} aria-label="refresh">↻</button>
     </div>
     <div className="adm-intro">
-      Everything about running this instance: who uses it, how they get in, the AI Coach, and what has happened on it. Nothing here shows anyone's training data beyond counts.
+      {t('Everything about running this instance: who uses it, how they get in, workouts, the AI Coach, and what has happened on it.')}
     </div>
 
     {usersErr && <div className="card" role="alert" style={{ borderColor: 'var(--red)' }}>
-      <div className="row between"><h2 style={{ margin: 0 }}>{users ? 'The last update failed' : 'Could not load the users'}</h2>
-        <Button size="sm" icon="reset" onClick={loadUsers}>Try again</Button></div>
+      <div className="row between"><h2 style={{ margin: 0 }}>{users ? t('The last update failed') : t('Could not load the users')}</h2>
+        <Button size="sm" icon="reset" onClick={loadUsers}>{t('Try again')}</Button></div>
       <div className="adm-lead" style={{ marginBottom: 0 }}>
-        {usersErr} {users ? 'The list below is the last one that loaded.' : 'It tries again every 15 seconds.'}
+        {usersErr} {users ? t('The list below is the last one that loaded.') : t('It tries again every 15 seconds.')}
       </div>
     </div>}
 
     <div className="tiles" style={{ marginBottom: 12 }}>
-      <div className="tile"><div className="l">Users</div><div className="v">{users ? users.length : '–'}</div></div>
-      <div className="tile"><div className="l">Training now</div><div className="v" style={{ color: liveUsers.length ? 'var(--acc)' : undefined }}>{users ? liveUsers.length : '–'}</div></div>
-      <div className="tile"><div className="l">Active 7 days</div><div className="v">{users ? activeCount : '–'}</div></div>
-      <div className="tile"><div className="l">Disabled</div><div className="v">{users ? disabledCount : '–'}</div></div>
+      <div className="tile"><div className="l">{t('Users')}</div><div className="v">{users ? users.length : '–'}</div></div>
+      <div className="tile"><div className="l">{t('Training now')}</div><div className="v" style={{ color: liveUsers.length ? 'var(--acc)' : undefined }}>{users ? liveUsers.length : '–'}</div></div>
+      <div className="tile"><div className="l">{t('Active 7 days')}</div><div className="v">{users ? activeCount : '–'}</div></div>
+      <div className="tile"><div className="l">{t('Disabled')}</div><div className="v">{users ? disabledCount : '–'}</div></div>
     </div>
 
     {liveUsers.length > 0 && <div className="card" style={{ borderColor: 'var(--acc)' }}>
-      <h2 className="row" style={{ margin: '0 0 2px', gap: 6 }}><Icon name="dot" style={{ fontSize: 10, color: 'var(--green)' }} />Training now</h2>
-      <div className="adm-lead">Sessions running at this moment. Tap a name for details.</div>
+      <h2 className="row" style={{ margin: '0 0 2px', gap: 6 }}><Icon name="dot" style={{ fontSize: 10, color: 'var(--green)' }} />{t('Training now')}</h2>
+      <div className="adm-lead">{t('Sessions running at this moment. Tap a name for details.')}</div>
       {liveUsers.map(u => <div key={u.id} className="row between" style={{ padding: '8px 2px', borderBottom: 'var(--hair) solid var(--sep)' }} onClick={() => openUser(u.id)}>
         <div><div className="small" style={{ fontWeight: 600 }}>{u.name}</div>
-          <div className="dim" style={{ fontSize: '.72rem' }}>{u.live.name} · exercise {u.live.exIdx} of {u.live.exTotal} · {u.live.setsDone}/{u.live.setsTotal} sets</div></div>
+          <div className="dim" style={{ fontSize: '.72rem' }}>{u.live.name} · {t('exercise {0} of {1}', u.live.exIdx, u.live.exTotal)} · {u.live.setsDone}/{u.live.setsTotal} {t('sets')}</div></div>
         <span className="adm-pill acc">{dur(Date.now() - u.live.startedAt)}</span>
       </div>)}
     </div>}
+
+    <AdminWorkouts users={users} onAssigned={loadUsers} />
 
     {/* The Coach setup. Renders nothing at all unless the instance offers the Coach, so an admin
         page on a box that never enabled it is byte-for-byte the page it was before. */}
@@ -351,16 +373,34 @@ export default function Admin() {
     <InvitesCard invites={invites} reload={loadInvites} inviteOnly={inviteOnly} />
 
     <div className="card">
-      <h2 style={{ margin: 0 }}>Users</h2>
-      <div className="adm-lead">Everyone with a profile on this instance. Tap one to see their activity, to disable the account (nothing is deleted) or to delete it with all their data for good.</div>
+      <h2 style={{ margin: 0 }}>{t('Registered students & users')}</h2>
+      <div className="adm-lead">{t('Everyone with a profile on this instance. Tap one to view their registration, workouts and routines, or manage their account.')}</div>
+      <input
+        className="inp"
+        style={{ marginBottom: 8 }}
+        placeholder={t('Search by name or e-mail…')}
+        value={userSearch}
+        onChange={e => setUserSearch(e.target.value)}
+      />
+      <div className="chips" style={{ marginBottom: 10 }}>
+        {[['all', 'All'], ['active', 'Active'], ['disabled', 'Disabled'], ['admin', 'Admin']].map(([k, label]) => (
+          <button key={k} type="button" className={'chip' + (userFilter === k ? ' on' : '')} onClick={() => setUserFilter(k)}>
+            {t(label)}
+          </button>
+        ))}
+      </div>
       <div className="list">
-        {(users || []).map(u => <div key={u.id} className="item" onClick={() => openUser(u.id)} style={u.disabled ? { opacity: .55 } : null}>
-          <div className="grow"><div className="tt">{u.live && <Icon name="dot" style={{ fontSize: 9, color: 'var(--green)', display: 'inline-block', marginInlineEnd: 5 }} />}{u.name} {u.admin && <span className="adm-pill acc" style={{ marginInlineStart: 4 }}>{u.owner ? 'owner' : 'admin'}</span>}{u.disabled && <span className="adm-pill bad" style={{ marginInlineStart: 4 }}>disabled</span>}</div>
-            <div className="ss">{u.live ? 'training now · ' + u.live.name : u.workouts + ' workouts' + (u.lastWorkout ? ' · last ' + fmtDate(u.lastWorkout) : '') + ' · last sync ' + rel(u.lastSync)}</div>
-            {u.email && <div className="ss" title="sign-in e-mail">{u.email}</div>}</div>
+        {filteredUsers.map(u => <div key={u.id} className="item" onClick={() => openUser(u.id)} style={u.disabled ? { opacity: .55 } : null}>
+          <div className="grow"><div className="tt">{u.live && <Icon name="dot" style={{ fontSize: 9, color: 'var(--green)', display: 'inline-block', marginInlineEnd: 5 }} />}{u.name} {u.admin && <span className="adm-pill acc" style={{ marginInlineStart: 4 }}>{u.owner ? t('owner') : t('admin')}</span>}{u.disabled && <span className="adm-pill bad" style={{ marginInlineStart: 4 }}>{t('disabled')}</span>}</div>
+            <div className="ss">{u.live ? t('training now') + ' · ' + u.live.name : u.workouts + ' ' + t('workouts') + (u.lastWorkout ? ' · ' + t('last') + ' ' + fmtDate(u.lastWorkout) : '') + ' · ' + t('last sync') + ' ' + rel(u.lastSync)}</div>
+            <div className="ss">
+              {u.email && <span title="sign-in e-mail">{u.email}</span>}
+              {u.email && u.created && ' · '}
+              {u.created && <span>{t('joined')} {fmtDate(u.created.slice(0, 10))}</span>}
+            </div></div>
           {u.hasPush && <Icon name="bell" title="push notifications on" style={{ fontSize: 15, color: 'var(--label-3)' }} />}<Icon name="chevronRight" className="chev" />
         </div>)}
-        {users && !users.length && <div className="adm-empty">No users yet.</div>}
+        {users && !filteredUsers.length && <div className="adm-empty">{t('No users yet.')}</div>}
       </div>
     </div>
 

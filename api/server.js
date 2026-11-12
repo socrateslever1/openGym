@@ -2691,7 +2691,7 @@ const routes = {
       },
       unit: S.unit || 'kg',
       lastSync: lastSyncOf(u, S),
-      routines: records(S.routines).map(r => ({ id: r.id, name: r.name, emoji: r.emoji, count: records(r.ex).length })),
+      routines: records(S.routines).map(r => ({ id: r.id, name: r.name, emoji: r.emoji, count: records(r.ex).length, assignedByAdmin: !!r.assignedByAdmin, ex: records(r.ex) })),
       bodyweight: records(S.bodyweight),
       // records() already copied, so this reverse is ours: newest first for display. A workout's
       // photos and videos are the owner's own: the admin view gets no refs to them.
@@ -2804,6 +2804,109 @@ const routes = {
     saveDb();
     audit(req, 'admin.invite.revoke', { user: admin, msg: inv.code });
     json(res, 200, { ok: true });
+  },
+
+  /* ---------- admin workout templates & student assignment ---------- */
+  'GET /api/admin/templates': async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    json(res, 200, { templates: Array.isArray(db.templates) ? db.templates : [] });
+  },
+
+  'POST /api/admin/templates': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const name = text(body.name).slice(0, 80);
+    if (!name) return json(res, 400, { error: 'name required' });
+    const emoji = text(body.emoji).slice(0, 8) || '🏋️';
+    const ex = (Array.isArray(body.ex) ? body.ex : []).filter(record).map(item => ({
+      id: text(item.id).slice(0, 32),
+      name: text(item.name).slice(0, 120),
+      sets: Math.max(1, Math.min(20, Math.round(Number(item.sets) || 3))),
+      reps: text(item.reps ?? '10').slice(0, 24) || '10',
+      weight: Math.max(0, Number(item.weight) || 0),
+      rest: Math.max(0, Math.min(600, Math.round(Number(item.rest) || 90))),
+      ...(text(item.note) ? { note: text(item.note).slice(0, 240) } : {})
+    })).filter(item => item.id || item.name);
+    if (!ex.length) return json(res, 400, { error: 'at least one exercise required' });
+    if (!Array.isArray(db.templates)) db.templates = [];
+    const now = Date.now();
+    const id = text(body.id).slice(0, 40) || ('tpl_' + crypto.randomBytes(6).toString('hex'));
+    const tpl = { id, name, emoji, ex, updatedAt: now, updatedBy: admin.id };
+    const idx = db.templates.findIndex(t => t.id === id);
+    if (idx >= 0) db.templates[idx] = tpl; else db.templates.push(tpl);
+    saveDb();
+    audit(req, 'admin.template.save', { user: admin, msg: name });
+    json(res, 200, { ok: true, template: tpl });
+  },
+
+  'POST /api/admin/templates/delete': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const id = text(body.id);
+    if (!id) return json(res, 400, { error: 'id required' });
+    db.templates = (Array.isArray(db.templates) ? db.templates : []).filter(t => t.id !== id);
+    saveDb();
+    audit(req, 'admin.template.delete', { user: admin, msg: id });
+    json(res, 200, { ok: true });
+  },
+
+  'POST /api/admin/user/routines': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const ids = Array.isArray(body.userIds) ? body.userIds.map(x => text(x)).filter(Boolean) : (body.id ? [text(body.id)] : []);
+    if (!ids.length) return json(res, 400, { error: 'userIds required' });
+    const tpl = body.templateId ? (Array.isArray(db.templates) ? db.templates : []).find(t => t.id === text(body.templateId)) : null;
+    const src = tpl || (record(body.routine) ? body.routine : null);
+    if (!src || !text(src.name)) return json(res, 400, { error: 'routine or templateId required' });
+    const mode = body.mode === 'replace' ? 'replace' : 'add';
+    const weekdays = Array.isArray(body.weekdays)
+      ? [...new Set(body.weekdays.map(d => String(d)).filter(d => /^[0-6]$/.test(d)))]
+      : [];
+    const assigned = [];
+    for (const uid of ids) {
+      const target = db.users.find(x => x.id === uid);
+      if (!target) continue;
+      const cur = readStateStrict(target.id);
+      if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable for ' + target.name });
+      const base = (cur && typeof cur === 'object') ? structuredClone(cur) : { routines: [], workouts: [], bodyweight: [], week: {} };
+      const routineId = 'adm_' + crypto.randomBytes(6).toString('hex');
+      const routine = {
+        id: routineId,
+        name: text(src.name).slice(0, 80),
+        emoji: text(src.emoji).slice(0, 8) || '🏋️',
+        ex: (Array.isArray(src.ex) ? src.ex : []).filter(record).map(item => ({
+          id: text(item.id).slice(0, 32),
+          name: text(item.name).slice(0, 120),
+          sets: Math.max(1, Math.min(20, Math.round(Number(item.sets) || 3))),
+          reps: text(item.reps ?? '10').slice(0, 24) || '10',
+          weight: Math.max(0, Number(item.weight) || 0),
+          rest: Math.max(0, Math.min(600, Math.round(Number(item.rest) || 90))),
+          ...(text(item.note) ? { note: text(item.note).slice(0, 240) } : {})
+        })),
+        assignedByAdmin: true,
+        assignedAt: Date.now()
+      };
+      const existing = records(base.routines);
+      base.routines = mode === 'replace' ? [routine] : [...existing, routine];
+      if (weekdays.length) {
+        if (!record(base.week)) base.week = {};
+        for (const d of weekdays) {
+          const prev = Array.isArray(base.week[d]) ? base.week[d] : (base.week[d] ? [base.week[d]] : []);
+          base.week[d] = mode === 'replace' ? [routineId] : [...prev, routineId];
+        }
+      }
+      const curRev = base._rev || 0;
+      base._rev = curRev + 1;
+      base._ts = Date.now();
+      base._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])]
+        .filter(x => typeof x === 'string').slice(-WID_KEEP);
+      base._wid = crypto.randomBytes(8).toString('hex');
+      atomicWrite(stateFile(target.id), JSON.stringify(base));
+      stateCache.delete(target.id);
+      assigned.push({ id: target.id, name: target.name, routineId });
+      audit(req, 'admin.routine.assign', { user: admin, target, msg: routine.name });
+    }
+    json(res, 200, { ok: true, assigned });
   },
 
   /* ---------- activity log ---------- */
