@@ -942,6 +942,7 @@ export default function Settings({ page = null, find = null, via = null, entryKe
           {/* No passkeys in this browser (plain http on a LAN address, say): a password is the way in. */}
           <Row icon="plusCircle" iconTint="var(--acc)" title={t('Create new profile')} subtitle={t('Keeps your data safe and separate per person.')} accessory="chevron" onClick={openPasswordRegister} />
           <Row icon="key" iconTint="var(--orange)" title={t('Sign in with password')} accessory="chevron" onClick={() => openPasswordSignIn()} />
+          <Row icon="signOut" iconTint="var(--red)" title={t('Sign out')} danger onClick={exitGuest} />
           <KeptChangesRows />
         </> : <>
           <Row icon="lock" iconTint="var(--grey)" title={t('Passkeys not supported in this browser.')} />
@@ -987,7 +988,11 @@ export default function Settings({ page = null, find = null, via = null, entryKe
   /* ---------------- the root ---------------- */
   return <SettingsRoot ctx={ctx} preview={preview} open={open} user={user} sync={sync} entryKey={entryKey}
     home={() => nav('/home')}
-    openAdmin={() => nav('/admin')}
+    openAdmin={() => {
+      if (user?.admin) { nav('/admin'); return }
+      toast(t('Sign in with an admin account to access the Admin panel.'))
+      exitGuest()
+    }}
     onSignOut={user ? (MOBILE ? disconnect : signOutHere) : exitGuest}
     go={(hit) => {
       if (hit.page === 'coach') { nav('/coach/setup'); return }
@@ -1031,8 +1036,8 @@ function SettingsRoot({ ctx, preview, open, user, sync, home, openAdmin, onSignO
           <span className="lrow-m"><span className="lrow-t">{acct.title}</span><span className="lrow-s">{acct.sub}</span></span>
           <Icon name="chevronRight" className="lrow-c" />
         </button>
-        {user && !DEMO && user.admin && (
-          <Row icon="crown" iconTint="var(--indigo)" title={t('Admin dashboard')} accessory="chevron" onClick={openAdmin} className="sp-root-row" />
+        {!DEMO && (!user || user.admin) && (
+          <Row icon="crown" iconTint="var(--indigo)" title={t('Admin dashboard')} subtitle={!user ? t('Sign in as Admin to open') : undefined} accessory="chevron" onClick={openAdmin} className="sp-root-row" />
         )}
       </Section>
       {ROOT_GROUPS.map(g => g.filter(id => pageVisible(id, ctx))).filter(g => g.length).map(g => (

@@ -100,5 +100,48 @@ test('admin can create/delete workout templates and assign routines to registere
     body: JSON.stringify({ id: template.id })
   });
   assert.equal(delRes.status, 200);
+
+  // Admin creates a student directly
+  const createStu = await fetch(`${h.api}/api/admin/user/create`, {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify({ name: 'Carlos Silva', email: 'carlos@example.com', password: 'StrongPassword123' })
+  });
+  assert.equal(createStu.status, 200);
+  const { user: newStu } = await createStu.json();
+  assert.equal(newStu.name, 'Carlos Silva');
+
+  // Admin updates student name & email
+  const updStu = await fetch(`${h.api}/api/admin/user/update`, {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify({ id: newStu.id, name: 'Carlos S.', email: 'carlos2@example.com' })
+  });
+  assert.equal(updStu.status, 200);
+  const { user: updatedStu } = await updStu.json();
+  assert.equal(updatedStu.name, 'Carlos S.');
+
+  // Admin saves a custom routine directly on the student
+  const saveRt = await fetch(`${h.api}/api/admin/user/routine/save`, {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify({
+      id: newStu.id,
+      routine: { name: 'Treino B - Costas', emoji: '💪', ex: [{ id: 'pullup', name: 'Barra fixa', sets: 4, reps: '8', weight: 0, rest: 90 }] }
+    })
+  });
+  assert.equal(saveRt.status, 200);
+  const { routine: savedRt } = await saveRt.json();
+  assert.equal(savedRt.name, 'Treino B - Costas');
+
+  // Admin deletes that routine from the student
+  const delRt = await fetch(`${h.api}/api/admin/user/routine/delete`, {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify({ id: newStu.id, routineId: savedRt.id })
+  });
+  assert.equal(delRt.status, 200);
+  const checkStu = await (await fetch(`${h.api}/api/admin/user?id=${newStu.id}`, { headers: adminHeaders })).json();
+  assert.equal(checkStu.routines.length, 0);
 });
 

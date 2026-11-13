@@ -2693,6 +2693,7 @@ const routes = {
       lastSync: lastSyncOf(u, S),
       routines: records(S.routines).map(r => ({ id: r.id, name: r.name, emoji: r.emoji, count: records(r.ex).length, assignedByAdmin: !!r.assignedByAdmin, ex: records(r.ex) })),
       bodyweight: records(S.bodyweight),
+      measurements: records(S.measurements),
       // records() already copied, so this reverse is ours: newest first for display. A workout's
       // photos and videos are the owner's own: the admin view gets no refs to them.
       workouts: records(S.workouts).reverse().map(({ media, ...w }) => w)
@@ -2907,6 +2908,141 @@ const routes = {
       audit(req, 'admin.routine.assign', { user: admin, target, msg: routine.name });
     }
     json(res, 200, { ok: true, assigned });
+  },
+
+  'POST /api/admin/user/create': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const name = text(body.name).trim().slice(0, 40);
+    if (!name) return json(res, 400, { error: 'name required', code: 'missing' });
+    if (nameTaken(name)) return json(res, 409, { error: 'another profile already uses this name', code: 'name-taken' });
+    const hasEmail = typeof body.email === 'string' && body.email.trim() !== '';
+    const email = hasEmail ? normalizeEmail(body.email) : null;
+    if (hasEmail && !email) return json(res, 400, EMAIL_ERRORS.invalid);
+    if (email && emailTaken(email)) return json(res, 409, EMAIL_ERRORS.taken);
+    let pw = null;
+    if (typeof body.password === 'string' && body.password !== '') {
+      const problem = passwordProblem(body.password, name);
+      if (problem) return policyError(res, problem);
+      const h = await hashPassword(body.password);
+      pw = { h, set: new Date().toISOString() };
+    }
+    const created = new Date().toISOString();
+    const user = {
+      id: crypto.randomBytes(12).toString('base64url'),
+      name,
+      created,
+      ...(pw ? { pw } : {}),
+      ...(email ? { email } : {}),
+      ...(body.admin && isOwner(admin) ? { admin: true } : {})
+    };
+    db.users.push(user);
+    saveDb();
+    audit(req, 'admin.user.create', { user: admin, target: user, msg: name });
+    json(res, 200, { ok: true, user: publicUser(user) });
+  },
+
+  'POST /api/admin/user/update': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const u = db.users.find(x => x.id === text(body.id));
+    if (!u) return json(res, 404, { error: 'no such user' });
+    if (isOwner(u) && !isOwner(admin)) return json(res, 403, { error: 'only the owner can edit the owner account' });
+    if (isAdmin(u) && u.id !== admin.id && !isOwner(admin)) return json(res, 403, { error: 'only the owner can edit another admin' });
+    if (typeof body.name === 'string') {
+      const name = text(body.name).trim().slice(0, 40);
+      if (!name) return json(res, 400, { error: 'name required', code: 'missing' });
+      if (nameTaken(name, u.id)) return json(res, 409, { error: 'another profile already uses this name', code: 'name-taken' });
+      u.name = name;
+    }
+    if (typeof body.email === 'string') {
+      const trimmed = body.email.trim();
+      if (!trimmed) {
+        delete u.email;
+      } else {
+        const email = normalizeEmail(trimmed);
+        if (!email) return json(res, 400, EMAIL_ERRORS.invalid);
+        if (emailTaken(email, u.id)) return json(res, 409, EMAIL_ERRORS.taken);
+        u.email = email;
+      }
+    }
+    if (typeof body.password === 'string' && body.password !== '') {
+      const problem = passwordProblem(body.password, u.name);
+      if (problem) return policyError(res, problem);
+      const h = await hashPassword(body.password);
+      u.pw = { h, set: new Date().toISOString() };
+      delete u.pwReset;
+    }
+    saveDb();
+    audit(req, 'admin.user.update', { user: admin, target: u, msg: u.name });
+    json(res, 200, { ok: true, user: publicUser(u) });
+  },
+
+  'POST /api/admin/user/routine/save': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const target = db.users.find(x => x.id === text(body.id));
+    if (!target) return json(res, 404, { error: 'no such user' });
+    const src = record(body.routine) ? body.routine : null;
+    if (!src || !text(src.name)) return json(res, 400, { error: 'routine required' });
+    const cur = readStateStrict(target.id);
+    if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable for ' + target.name });
+    const base = (cur && typeof cur === 'object') ? structuredClone(cur) : { routines: [], workouts: [], bodyweight: [], week: {} };
+    const existing = records(base.routines);
+    const rid = text(src.id).slice(0, 64) || ('adm_' + crypto.randomBytes(6).toString('hex'));
+    const routine = {
+      id: rid,
+      name: text(src.name).slice(0, 80),
+      emoji: text(src.emoji).slice(0, 8) || '🏋️',
+      ex: (Array.isArray(src.ex) ? src.ex : []).filter(record).map(item => ({
+        id: text(item.id).slice(0, 32),
+        name: text(item.name).slice(0, 120),
+        sets: Math.max(1, Math.min(20, Math.round(Number(item.sets) || 3))),
+        reps: text(item.reps ?? '10').slice(0, 24) || '10',
+        weight: Math.max(0, Number(item.weight) || 0),
+        rest: Math.max(0, Math.min(600, Math.round(Number(item.rest) || 90))),
+        ...(text(item.note) ? { note: text(item.note).slice(0, 240) } : {})
+      })),
+      assignedByAdmin: true,
+      assignedAt: Date.now()
+    };
+    const idx = existing.findIndex(r => r.id === rid);
+    base.routines = idx >= 0 ? existing.map((r, i) => (i === idx ? routine : r)) : [...existing, routine];
+    base._rev = (base._rev || 0) + 1;
+    base._ts = Date.now();
+    base._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])].filter(x => typeof x === 'string').slice(-WID_KEEP);
+    base._wid = crypto.randomBytes(8).toString('hex');
+    atomicWrite(stateFile(target.id), JSON.stringify(base));
+    stateCache.delete(target.id);
+    audit(req, 'admin.routine.save', { user: admin, target, msg: routine.name });
+    json(res, 200, { ok: true, routine });
+  },
+
+  'POST /api/admin/user/routine/delete': async (req, res) => {
+    const admin = requireAdmin(req, res); if (!admin) return;
+    const body = await readBody(req);
+    const target = db.users.find(x => x.id === text(body.id));
+    if (!target) return json(res, 404, { error: 'no such user' });
+    const rid = text(body.routineId);
+    if (!rid) return json(res, 400, { error: 'routineId required' });
+    const cur = readStateStrict(target.id);
+    if (cur === UNREADABLE) return json(res, 503, { error: 'state unreadable for ' + target.name });
+    const base = (cur && typeof cur === 'object') ? structuredClone(cur) : { routines: [], workouts: [], bodyweight: [], week: {} };
+    base.routines = records(base.routines).filter(r => r.id !== rid);
+    if (record(base.week)) {
+      for (const k of Object.keys(base.week)) {
+        if (Array.isArray(base.week[k])) base.week[k] = base.week[k].filter(x => x !== rid);
+        else if (base.week[k] === rid) delete base.week[k];
+      }
+    }
+    base._rev = (base._rev || 0) + 1;
+    base._ts = Date.now();
+    base._wids = [...(Array.isArray(base._wids) ? base._wids : []), ...(base._wid ? [base._wid] : [])].filter(x => typeof x === 'string').slice(-WID_KEEP);
+    base._wid = crypto.randomBytes(8).toString('hex');
+    atomicWrite(stateFile(target.id), JSON.stringify(base));
+    stateCache.delete(target.id);
+    audit(req, 'admin.routine.delete', { user: admin, target, msg: rid });
+    json(res, 200, { ok: true });
   },
 
   /* ---------- activity log ---------- */

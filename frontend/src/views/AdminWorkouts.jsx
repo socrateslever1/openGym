@@ -17,7 +17,7 @@ const DAY_KEYS = [
   ['0', 'Dom'],
 ]
 
-function TemplateEditor({ initial, onSaved, close }) {
+export function TemplateEditor({ initial, title, onSaveCustom, onSaved, close }) {
   const toast = useUI(s => s.toast)
   const [name, setName] = useState(initial?.name || '')
   const [emoji, setEmoji] = useState(initial?.emoji || '🏋️')
@@ -46,12 +46,14 @@ function TemplateEditor({ initial, onSaved, close }) {
     if (!ex.length) return toast(t('Add at least one exercise'))
     setSaving(true)
     try {
-      await api('/api/admin/templates', {
-        method: 'POST',
-        body: JSON.stringify({ id: initial?.id || '', name: name.trim(), emoji: emoji.trim() || '🏋️', ex }),
-      })
-      toast(t('Workout template saved'))
-      onSaved()
+      const payload = { id: initial?.id || '', name: name.trim(), emoji: emoji.trim() || '🏋️', ex }
+      if (onSaveCustom) {
+        await onSaveCustom(payload)
+      } else {
+        await api('/api/admin/templates', { method: 'POST', body: JSON.stringify(payload) })
+        toast(t('Workout template saved'))
+      }
+      onSaved?.()
       close()
     } catch (e) {
       toast(e.message)
@@ -61,7 +63,7 @@ function TemplateEditor({ initial, onSaved, close }) {
   }
 
   return <>
-    <h3 style={{ marginTop: 0 }}>{initial?.id ? t('Edit workout template') : t('New workout template')}</h3>
+    <h3 style={{ marginTop: 0 }}>{title || (initial?.id ? t('Edit workout template') : t('New workout template'))}</h3>
     <div className="row" style={{ gap: 8, marginBottom: 10 }}>
       <input
         className="inp"
