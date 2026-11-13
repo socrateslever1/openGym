@@ -886,7 +886,7 @@ export default function Settings({ page = null, find = null, via = null, entryKe
           build there is no address bar and no about box, so without this there is no way to tell
           which build you are running, or whether an update actually installed. */}
       <div className="dim small sp-version">
-        openGym v{__APP_VERSION__} · {t('free & open source (AGPL v3)')}<br />
+        LvrGym v{__APP_VERSION__} · {t('free & open source (AGPL v3)')}<br />
         <a href="https://github.com/DuarteSantos8/openGym" target="_blank" rel="noopener">{t('Source code')}</a><br />
         {/* Attribution the media licence asks for word for word (agreement §8c), so it is not translated */}
         Exercise media © Aliaksandr Makatserchyk, <a href="https://gymvisual.com/" target="_blank" rel="noopener">Gym visual</a>, gymvisual.com.
@@ -975,15 +975,27 @@ export default function Settings({ page = null, find = null, via = null, entryKe
     </div>
   }
 
+  const exitGuest = () => {
+    if (MOBILE) {
+      useUI.getState().openSheet(close => <ConnectSheet close={close} />)
+      return
+    }
+    useStore.getState().setGuest?.(false)
+    nav('/login')
+  }
+
   /* ---------------- the root ---------------- */
   return <SettingsRoot ctx={ctx} preview={preview} open={open} user={user} sync={sync} entryKey={entryKey}
-    home={() => nav('/home')} go={(hit) => {
+    home={() => nav('/home')}
+    openAdmin={() => nav('/admin')}
+    onSignOut={user ? (MOBILE ? disconnect : signOutHere) : exitGuest}
+    go={(hit) => {
       if (hit.page === 'coach') { nav('/coach/setup'); return }
       nav('/settings/' + hit.page, hit.isPage ? undefined : { state: hit.via ? { find: hit.title, via: hit.via } : { find: hit.title } })
     }} />
 }
 
-function SettingsRoot({ ctx, preview, open, user, sync, home, go, entryKey }) {
+function SettingsRoot({ ctx, preview, open, user, sync, home, openAdmin, onSignOut, go, entryKey }) {
   // The router's key for this history entry, taken once. From the router rather than
   // window.history: drawn under an edge swipe back the page is the entry before the current one.
   const [key] = useState(() => (entryKey && entryKey !== 'default' && entryKey !== 'back-preview' ? entryKey : window.history.state?.key || null))
@@ -1019,6 +1031,9 @@ function SettingsRoot({ ctx, preview, open, user, sync, home, go, entryKey }) {
           <span className="lrow-m"><span className="lrow-t">{acct.title}</span><span className="lrow-s">{acct.sub}</span></span>
           <Icon name="chevronRight" className="lrow-c" />
         </button>
+        {user && !DEMO && user.admin && (
+          <Row icon="crown" iconTint="var(--indigo)" title={t('Admin dashboard')} accessory="chevron" onClick={openAdmin} className="sp-root-row" />
+        )}
       </Section>
       {ROOT_GROUPS.map(g => g.filter(id => pageVisible(id, ctx))).filter(g => g.length).map(g => (
         <Section key={g[0]}>
@@ -1026,7 +1041,12 @@ function SettingsRoot({ ctx, preview, open, user, sync, home, go, entryKey }) {
             value={preview[id]?.() || null} accessory="chevron" onClick={() => open(id)} className="sp-root-row" />)}
         </Section>
       ))}
-      <div className="dim small sp-version">openGym v{__APP_VERSION__}</div>
+      {!DEMO && (
+        <Section>
+          <Row icon="signOut" iconTint="var(--red)" title={user && MOBILE ? t('Disconnect') : t('Sign out')} danger onClick={onSignOut} className="sp-root-row" />
+        </Section>
+      )}
+      <div className="dim small sp-version">LvrGym v{__APP_VERSION__}</div>
     </>}
   </div>
 }
